@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Packet Analyzer | Computer Networks Activity 2</title>
+    <!-- Academic Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="app-container">
+        
+        <!-- Academic Header -->
+        <header class="academic-header">
+            <div class="header-main">
+                <div class="header-title-group">
+                    <span class="badge-academic">CN – Activity 2</span>
+                    <h1>Network Packet Analyzer</h1>
+                    <p class="subtitle">Real-Time Packet Capture, Protocol Detection & Inspection System</p>
+                </div>
+                <!-- Status Badge -->
+                <div class="status-box">
+                    <div id="statusIndicator" class="status-badge status-stopped">
+                        <span class="status-dot"></span>
+                        <span id="statusText">CAPTURE STOPPED</span>
+                    </div>
+                    <div id="modeBadge" class="mode-badge mode-real">REAL CAPTURE MODE</div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Permission / Driver Alert (Hidden by default, shown if Scapy warning) -->
+        <div id="errorAlert" class="alert-box alert-warning hidden">
+            <div class="alert-icon">⚠️</div>
+            <div class="alert-content">
+                <strong id="alertTitle">Packet Capture Permission Notice</strong>
+                <p id="alertMsg">Administrator rights or Npcap library missing. Running in DEMO MODE fallback.</p>
+                <small>To enable real interface capture: Run terminal as Administrator (`python app.py`) and ensure Npcap is installed on Windows.</small>
+            </div>
+        </div>
+
+        <!-- Dashboard Control Bar -->
+        <section class="control-section">
+            <div class="button-group">
+                <button id="btnStart" class="btn btn-primary">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                    Start Capture
+                </button>
+                <button id="btnStop" class="btn btn-secondary" disabled>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h12v12H6z"/></svg>
+                    Stop Capture
+                </button>
+                <button id="btnClear" class="btn btn-outline">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                    Clear Data
+                </button>
+                <button id="btnToggleDemo" class="btn btn-muted">
+                    Switch to Demo Mode
+                </button>
+            </div>
+        </section>
+
+        <!-- Metric Counter Cards -->
+        <section class="metrics-grid">
+            <div class="metric-card">
+                <span class="metric-label">Total Packets</span>
+                <span id="statTotal" class="metric-value">0</span>
+            </div>
+            <div class="metric-card">
+                <span class="metric-label">TCP Packets</span>
+                <span id="statTcp" class="metric-value">0</span>
+            </div>
+            <div class="metric-card">
+                <span class="metric-label">UDP Packets</span>
+                <span id="statUdp" class="metric-value">0</span>
+            </div>
+            <div class="metric-card">
+                <span class="metric-label">ICMP Packets</span>
+                <span id="statIcmp" class="metric-value">0</span>
+            </div>
+            <div class="metric-card">
+                <span class="metric-label">Other Protocols</span>
+                <span id="statOther" class="metric-value">0</span>
+            </div>
+        </section>
+
+        <!-- Search & Filter Controls -->
+        <section class="filter-card">
+            <div class="filter-title">Search & Protocol Filter</div>
+            <div class="filter-controls">
+                <div class="filter-field">
+                    <label for="filterIp">IP Address</label>
+                    <input type="text" id="filterIp" placeholder="e.g. 192.168.1.1">
+                </div>
+                <div class="filter-field">
+                    <label for="filterProtocol">Protocol</label>
+                    <select id="filterProtocol">
+                        <option value="ALL">All Protocols</option>
+                        <option value="TCP">TCP</option>
+                        <option value="UDP">UDP</option>
+                        <option value="ICMP">ICMP</option>
+                        <option value="OTHER">Other</option>
+                    </select>
+                </div>
+                <div class="filter-field">
+                    <label for="filterPort">Port Number</label>
+                    <input type="text" id="filterPort" placeholder="e.g. 80, 443, 53">
+                </div>
+                <div class="filter-actions">
+                    <button id="btnResetFilter" class="btn btn-sm btn-outline">Reset Filters</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Live Packet Table Section -->
+        <section class="table-section">
+            <div class="section-header">
+                <h2>Live Captured Packets</h2>
+                <span class="table-counter">Showing <span id="visiblePacketCount">0</span> packets</span>
+            </div>
+            <div class="table-wrapper">
+                <table id="packetTable" class="packet-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 80px;">#</th>
+                            <th style="width: 110px;">Time</th>
+                            <th>Source IP</th>
+                            <th>Destination IP</th>
+                            <th style="width: 100px;">Protocol</th>
+                            <th style="width: 100px;">Src Port</th>
+                            <th style="width: 100px;">Dst Port</th>
+                            <th style="width: 100px;">Size (B)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="packetTableBody">
+                        <tr id="emptyRow">
+                            <td colspan="8" class="text-center empty-msg">No packets captured yet. Click "Start Capture" to monitor network traffic.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Analytics & Charts Section -->
+        <section class="charts-grid">
+            <div class="chart-card">
+                <h3>Protocol Distribution</h3>
+                <div class="chart-container">
+                    <canvas id="protocolChart"></canvas>
+                </div>
+            </div>
+            <div class="chart-card">
+                <h3>Packets Captured Over Time</h3>
+                <div class="chart-container">
+                    <canvas id="timelineChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- Academic Footer -->
+        <footer class="academic-footer">
+            <div class="footer-line"></div>
+            <div class="footer-content">
+                <span>Computer Networks – Activity 2</span>
+                <span class="dot-separator">•</span>
+                <span>Network Packet Analyzer</span>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Packet Details Modal Dialog -->
+    <div id="detailModal" class="modal-overlay hidden">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>Packet Details Inspection #<span id="modalPktId"></span></h3>
+                <button id="modalClose" class="modal-close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="detail-summary-bar">
+                    <span id="modalProtoBadge" class="proto-badge">TCP</span>
+                    <span id="modalSummary" class="modal-summary-text"></span>
+                </div>
+                
+                <table class="detail-table">
+                    <tbody>
+                        <tr><th>Timestamp</th><td id="modalTime"></td></tr>
+                        <tr><th>Source IP</th><td id="modalSrcIp" class="code-font"></td></tr>
+                        <tr><th>Destination IP</th><td id="modalDstIp" class="code-font"></td></tr>
+                        <tr><th>Source Port</th><td id="modalSrcPort" class="code-font"></td></tr>
+                        <tr><th>Destination Port</th><td id="modalDstPort" class="code-font"></td></tr>
+                        <tr><th>Packet Size</th><td id="modalLength"></td></tr>
+                    </tbody>
+                </table>
+
+                <div class="detail-sub-section">
+                    <h4>Header & Payload Analysis</h4>
+                    <pre id="modalRawDetails" class="raw-details-box"></pre>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="modalCloseBtn" class="btn btn-secondary">Close Inspector</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
